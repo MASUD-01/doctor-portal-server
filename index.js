@@ -1,7 +1,7 @@
 const express = require('express')
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express()
 require('dotenv').config();
 const port = process.env.PORT || 5000
@@ -35,9 +35,23 @@ async function run() {
         const serviceCollection = client.db('doctor_portal').collection('services')
         const bookingCollection = client.db('doctor_portal').collection('bookings')
         const userCollection = client.db('doctor_portal').collection('users')
+        const doctorCollection = client.db('doctor_portal').collection('doctors')
+
+
+        const verifyAdmin = async (req, res, next) => {
+            const requester = req.decoded.email;
+            const requesterAccount = await userCollection.findOne({ email: requester })
+            if (requesterAccount.role === 'admin') {
+                next();
+            }
+            else {
+                res.status(403).send({ message: 'forbidden' })
+            }
+        }
+
         app.get('/service', async (req, res) => {
             const query = {};
-            const cursor = serviceCollection.find(query)
+            const cursor = serviceCollection.find(query).project({ name: 1 })
             const services = await cursor.toArray()
             res.send(services)
         })
@@ -46,29 +60,23 @@ async function run() {
             const users = await userCollection.find().toArray();
             res.send(users);
         })
+
         app.get('/admin/:email', async (req, res) => {
             const email = req.params.email;
-            const user = userCollection.findOne({ email: email });
-            const isAdmin = user.role === 'admin'
+            const user = await userCollection.findOne({ email: email });
+            const isAdmin = user.role === 'admin';
             res.send({ admin: isAdmin })
         })
 
-        app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+        app.put('/user/admin/:email', verifyJWT, verifyAdmin, async (req, res) => {
             const email = req.params.email;
-            const requester = req.decoded.email;
-            const requesterAccount = await userCollection.findOne({ email: requester })
-            if (requesterAccount.role === 'admin') {
-                const filter = { email: email };
-                const updateDoc = {
-                    $set: { role: 'admin' },
-                };
-                const result = await userCollection.updateOne(filter, updateDoc);
-                res.send(result);
-            }
-            else {
-                res.status(403).send({ message: 'forbidden' })
-            }
 
+            const filter = { email: email };
+            const updateDoc = {
+                $set: { role: 'admin' },
+            };
+            const result = await userCollection.updateOne(filter, updateDoc);
+            res.send(result);
         })
         app.put('/user/:email', async (req, res) => {
             const email = req.params.email;
@@ -105,6 +113,14 @@ async function run() {
             }
         })
 
+
+        app.get('/booking/:id', verifyJWT, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: ObjectId(id) };
+            const booking = await bookingCollection.findOne(query)
+            res.send(booking);
+        })
+
         app.post('/booking', async (req, res) => {
             const booking = req.body;
             const query = { treatment: booking.treatment, date: booking.date, patient: booking.patient }
@@ -128,7 +144,6 @@ async function run() {
 
             const bookings = await bookingCollection.find(query).toArray();
 
-
             //step:3 for each service,
             services.forEach(service => {
                 console.log(service.name)
@@ -143,7 +158,28 @@ async function run() {
 
             })
             res.send(services);
+        });
+
+        app.get('/doctor', verifyJWT, verifyAdmin, async (req, res) => {
+            const doctor = await doctorCollection.find().toArray();
+            res.send(doctor)
         })
+
+
+        app.post('/doctor', verifyJWT, verifyAdmin, async (req, res) => {
+            const doctor = req.body;
+            const result = await doctorCollection.insertOne(doctor);
+            res.send(result);
+        })
+        app.delete('/doctor/:email', verifyJWT, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email };
+            const result = await doctorCollection.deleteOne(filter);
+            res.send(result);
+        })
+
+
+
     }
     finally {
 
