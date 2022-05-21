@@ -176,7 +176,7 @@ async function run() {
 
             //step:3 for each service,
             services.forEach(service => {
-                console.log(service.name)
+                // console.log(service.name)
                 //steps 4: find bookings for that service output: [{},{},{}]
                 const serviceBookings = bookings.filter(b => b.treatment === service.name);
                 //step 5: select slots for the service Bookings:['','','']
